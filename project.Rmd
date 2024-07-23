@@ -1,0 +1,222 @@
+---
+title: 'Project: Weight Lifting Exercise Prediction'
+author: "D.A. Kelome"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+# Objective:  
+We use the *Weight lifting Exercise (WLE)* dataset to build a few predictive models of how well participants perform the exercises. We start by cleaning the given training dataset, retain only variable that we deem relevant and prepare the dataset for analysis. All the three models that we used have their built-in cross validation processes; we however perform a 80%-20% split on the cleaned training data using the 20% portion for cross  validation after fitting a model to check its accuracy.We retain the most *accurate model* (by cross-validation) on the test data in order to complete the final quiz.
+
+# Data Cleaning and Preprocessing 
+
+The WLE training data contains 159 variablesas we deleted the first column which is an index for the observations. Many of the variables have missing information. A quick tabulation reveals that 100 of these variables have 19216 missing data (ie 98% of the records are missing for each of these variables); we decided not to impute the missing information and thus eliminates these variables from our analysis.We have therefore shrunk the datataset to 19622 obsevations with 59 variables of which 55 are numerical variables and 4 are categorical variables. We made the choice of including the 3 categorical variables as factors in our analysis; in order to reduce collinearity between the numerical variables, we preprcessed the data using  *Principal Component analysis*, setting the *the threshold of variance explained at 95%*, We thereby reduced the number of needed variables from 55 to 26; the obvious drawback from a *PCA* analysis is the lack of interpretatbility of the resulting new variables as there are some *rotations* of the original variables. our working dataset now has one outcome: *classe* along with 3 categorical variables and 26 numerical variables from *PCA*,labeled *PC1, PC2,..etc..*   
+ For cross-validation purposes, we split the training by selection a random sample of about 80% of te data for training and the remaining 20% forcross validation. for the sake of a quick exploration between the outcomes and our chosen variables, the graph below display the outcome-based boxplot for the variables *PC1* and *PC2*.
+
+ 
+
+```{r train,echo=FALSE,warnings=FALSE}
+ 
+par(mfrow=c(1,2))
+with(train,plot(classe,PC1,col=classe,xlab="classe", ylab="PC1"))
+with(train,plot(classe,PC2,col=classe,xlab="classe", ylab="PC2"))
+ 
+```
+
+# Model Fitting
+
+Our study is a classification question. we will investigate below three type of models:  
+* A tree model model with pruning  
+* A tree modelwith bagging  
+* A random forest model  
+For each of these model, we provide a brief explanation of the model-fitting process, ulitize the model on the cross validation data to check its accuracy. At the end, we shall retain the model with the lowest cross-validation error rate.
+While we will keep the explanation brief, details and terminologies for these models can be found in the textbook(s) listed on this page:
+[link](https://www.statlearning.com/).
+
+## A Pruned Tree model
+The idea is to first fit a basic tree model and search for the optimal tree size and use the built-in function *cv.train$ to select the optimal( lowest deviance) tree size and cost complexity constant.
+using *K-fold cross-validation* ( in this case we set K=20).  
+The graph belows displays the deviance as a fuction of the tree size and a functiontion of the cost complexity constant. 
+```{r echo=FALSE,warning=FALSE}
+par(mfrow = c(1, 2))
+plot (cv.train$size , cv.train$dev , type = "b")
+plot (cv.train$k, cv.train$dev , type = "b")
+
+```
+
+We can observe that the optimal size tree is 9 and that the optimal cost complexity constant is 0. We use this information to extract the best pruned tree and test it on the cross-validation data that we set aside earlier. the resulting *confusion matrix* is displayed below.
+ 
+
+```{r  echo=FALSE}
+data.tree<-table(prediction.tree,cross_val$classe) %>% 
+  kable()
+data.tree
+
+```
+ 
+ it can bestated that our pruned tree model has a *missclassification 
+error rate* of **`r round((150+87+24+138+14+369+157+4+20+7++77+359+7)/39.32,digits=2)`%**.  
+
+##  Bagging    
+Bagging involved fitting B=500 classification tree models like the one above by sampling with repetition from the training data set. fFr each tree model fitted, all 29 variables are used and the non selected observations are used for cross validations and an overall misclassification error (called * out of bag error*) can therefore be estimated. The table below shows the confusion matrix for our resulting model.
+
+```{r}
+kable(wle_bag$confusion)
+```
+It has an out-of-bag misclassification error rate of **1.61%**  
+We performed a cross validation on validation data that we set asde and the resulting confusion matrix is displayed below.  
+
+```{r  echo=FALSE}
+data.bagging<-table(prediction.bagging,cross_val$classe) %>% 
+  kable()
+data.bagging
+```
+This indicates a misclassification error rate of  **`r round((65)/39.3,digits=2)`%**.  
+
+
+## Random Forest
+The main difference between the bagging model and the random forest model is that for each tree only a sample of the variables are used as well. In our case we settle for selecting at random 6 variable at each resampling. The confusion matrix of the resulting model is displayed below.
+
+```{r  echo=FALSE}
+ kable(wle_bag$confusion)
+```
+The overall out-of-bag classification error is **1.33%**.  
+We used the model on ur cross validation data and otained the following confusion matrix
+
+```{r  echo=FALSE}
+data.rf<-table(prediction.rf,cross_val$classe) %>% 
+  kable()
+data.rf
+```
+with a misclassification error rate of  **`r round((44)/39.3,digits=2)`%**.   
+
+# Conclusion  
+
+The random forest model is the best of the three. We used it on the test set and obtained a 100% accuracy.
+
+```{r,echo=FALSE,eval=FALSE,warning=FALSE}
+library(tidyverse)
+library(caret)
+library(readr)
+ 
+library(knitr)
+pml_training <- read_csv("pml-training.csv")
+pml_testing <- read_csv("pml-testing.csv")
+# removing the first column which is an index column
+pml_training=pml_training[,-1]
+pml_testing=pml_testing[,-1]
+#check the relevance of the colums in term of NA
+x=colSums(is.na(pml_training))
+table(x)
+z=which(x<19216)
+training0=pml_training[,z] 
+z_ind=sapply(training0, is.numeric)
+# resulting data set with only 59 variables
+z_num=which(z_ind) # these are relevant num index
+
+training1=training0[,z_num]
+training2=training0[,-z_num]
+test0=pml_testing[,z]
+ test1=test0[,z_num]
+ test2=test0[,-z_num]
+ 
+
+# Note: training1 has isolated the numerical variables
+#and training 2 contains the categorical ones
+#
+# 55 numerical variables are a lot. PCA to select fewer variables
+library(caret)
+preProc <-preProcess(training1,method="pca",thresh = .95)
+ training3=predict(preProc,training1)
+ test3=predict(preProc,test1)
+ 
+  
+ 
+  
+  
+install.packages("tree")
+ library(tree)
+library(randomForest)
+ 
+
+# Attempt at uniformisation of variables
+training2=mutate(training2,ind=1)
+test2=test2[,-4]
+test2=mutate(test2,classe="A",ind=0)
+
+fulldata=data.frame(cbind(rbind(training3,test3),
+                          rbind(training2,test2)))
+fulldata=fulldata %>% 
+  mutate(user_name=as.factor(user_name),
+         cvtd_timestamp=as.factor(cvtd_timestamp),
+         new_window=as.factor(new_window),
+         classe=as.factor(classe))
+         
+# now the training set
+training=fulldata[fulldata$ind==1,]
+training=training[,-31]
+test=fulldata[fulldata$ind==0,]
+test=test[,-c(31,30)]
+# Splitting the train dta further 80%-20% for cross validation
+sub=sample(1:nrow(training),15690)
+train=training[sub,]
+cross_val=training[-sub,]
+# some plots
+par(mfrow=c(1,2))
+with(train,plot(classe,PC5,col=classe,xlab="classe", ylab="PC3"))
+with(train,plot(classe,PC6,col=classe,xlab="classe", ylab="PC4"))
+ 
+ 
+
+
+
+# Some Models
+# pruned tree model
+set.seed(194446)
+ 
+ 
+tree.train=tree(formula=classe~.,data=train)
+plot(tree.train)
+text(tree.train, pretty = 0)
+cv.train <-cv.tree(tree.train , FUN = prune.misclass,K=30 )
+names(cv.train)
+par(mfrow = c(1, 2))
+plot (cv.train$size , cv.train$dev , type = "b")
+plot (cv.train$k, cv.train$dev , type = "b")
+prune.train <-prune.misclass(tree.train , best = 9)
+plot ( prune.train )
+text ( prune.train, pretty = 0)
+# result here is a 34% MER as reported by summary. let 
+#us check on the cross validation data
+prediction.tree=predict(prune.train,cross_val,type="class")
+table(prediction.tree,cross_val$classe)
+# report a MER of 36.63% on the cross validation set
+#bagging
+set.seed(194446)
+install.packages("randomForest")
+library(randomForest)
+wle_bag=randomForest(classe~.,data=train, mtry=29,
+                     importance=TRUE)
+# Note: this bagging model has a built-in cross validation
+ 
+prediction.bagging=predict(wle_bag,cross_val)
+table(prediction.bagging,cross_val$classe)
+ 
+print(wle_bag)
+
+# random forest model
+# Now a true random forest model by taking mtry=6
+set.seed(194446)
+wle_rf=randomForest(classe~.,data=train, mtry=6,
+                    importance=TRUE)
+
+prediction.rf=predict(wle_rf,cross_val)
+table(prediction.rf,cross_val$classe)
+prediction=predict(wle_rf,test)
+prediction
+
+```
+
